@@ -2,6 +2,7 @@
 import sys
 import base64
 import hashlib
+import argparse
 from Crypto.Cipher import AES
 
 def evp_bytes_to_key(password: bytes, salt: bytes, key_len: int = 32, iv_len: int = 16):
@@ -27,19 +28,38 @@ def decrypt_openssl_aes(encrypted_b64: str, password: str) -> bytes:
     cipher = AES.new(key, AES.MODE_CBC, iv)
     decrypted = cipher.decrypt(ciphertext)
 
+    # Remove PKCS#7 padding
     pad_len = decrypted[-1]
     if pad_len < 1 or pad_len > 16:
         raise ValueError("Invalid padding in decrypted data.")
     return decrypted[:-pad_len]
 
 def main():
-    if len(sys.argv) < 3:
-        print("Usage: python decrypt.py <encryptedFile> <password> [outputFile]")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="Decrypt a file encrypted with CryptoJS/OpenSSL AES salted format."
+    )
+    parser.add_argument(
+        "encrypted_file",
+        type=str,
+        help="Path to the file containing Base64-encrypted AES data (starts with 'U2FsdGVkX1...')."
+    )
+    parser.add_argument(
+        "password",
+        type=str,
+        help="Password used to encrypt the file."
+    )
+    parser.add_argument(
+        "-o", "--output",
+        type=str,
+        default=None,
+        help="Output filename for decrypted content. Defaults to 'decrypted-<encrypted_file>'."
+    )
 
-    encrypted_file = sys.argv[1]
-    password = sys.argv[2]
-    output_file = sys.argv[3] if len(sys.argv) > 3 else f"decrypted-{encrypted_file}"
+    args = parser.parse_args()
+
+    encrypted_file = args.encrypted_file
+    password = args.password
+    output_file = args.output or f"decrypted-{encrypted_file}"
 
     try:
         with open(encrypted_file, "r", encoding="utf-8") as f:
