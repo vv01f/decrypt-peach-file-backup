@@ -1,0 +1,15 @@
+[project]
+name = "cryptojs-decryptor"
+version = "0.1.0"
+description = "Decrypt AES files encrypted with CryptoJS/OpenSSL salted format"
+authors = [
+    { name = "Wolf" }
+]
+requires-python = ">=3.9"
+
+[project.dependencies]
+pycryptodome = ">=3.18"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
