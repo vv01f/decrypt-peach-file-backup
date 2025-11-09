@@ -1,6 +1,6 @@
 You may need to retrieve information from the file backup to use your existing account with the [Peach API](https://docs.peachbitcoin.com/#introduction)
 
-[This implementation] (in Python3) of the [orginal tool] (in NodeJS) extends the functionality by:
+[This implementation] (in Python3) of the [original tool] (in NodeJS) extends the functionality by:
 * exporting the PGP keys and
 * encryption of changes to settings
 
