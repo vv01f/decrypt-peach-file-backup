@@ -3,8 +3,9 @@ You may need to retrieve information from the file backup to use your existing a
 [This implementation] (in Python3) of the [original tool] (in NodeJS) extends the functionality by:
 * exporting the PGP keys and
 * encryption of changes to settings
+* control the salt used for encryption
 
-For the main use case, from the command line, run: `./decrypt.py <filename> <password>`
+For the main use case, from the command line, run: `./decrypt.py -d <filename> <password>`
 
 For more information on options, run: `./decrypt.py --help`
 
