@@ -6,10 +6,12 @@ pkgs.mkShell {
   buildInputs = [
     pkgs.python3
     pkgs.python3Packages.pycryptodome
+    #~ pkgs.python3Packages.requests # HTTP / API
+    #~ pkgs.python3Packages.rich # nicer / colored cli output
   ];
 
   shellHook = ''
     echo "🔐 AES decryptor environment ready."
-    echo "Usage: python decrypt.py <encryptedText> <password> [outputFile]"
+    echo "Usage: python decrypt.py --help"
   '';
 }

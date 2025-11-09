@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
 
 def evp_bytes_to_key(password: bytes, salt: bytes, key_len: int = 32, iv_len: int = 16):
     """Pure Python implementation of OpenSSL EVP_BytesToKey using MD5."""
@@ -35,6 +36,20 @@ def decrypt_openssl_aes(encrypted_b64: str, password: str) -> bytes:
     if pad_len < 1 or pad_len > 16:
         raise ValueError("Invalid padding in decrypted data.")
     return decrypted[:-pad_len]
+
+def encrypt_openssl_aes(plaintext: str, password: str) -> str:
+    """Encrypt plaintext using OpenSSL-compatible AES with random salt."""
+    salt = get_random_bytes(8)
+    key, iv = evp_bytes_to_key(password.encode("utf-8"), salt)
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+
+    # PKCS#7 padding
+    pad_len = 16 - (len(plaintext.encode("utf-8")) % 16)
+    padded = plaintext.encode("utf-8") + bytes([pad_len]) * pad_len
+
+    encrypted = cipher.encrypt(padded)
+    out = b"Salted__" + salt + encrypted
+    return base64.b64encode(out).decode("utf-8")
 
 def unescape_pgp(pgp_str: str) -> str:
     """Unescape any escaped newlines or quotes that may exist in JSON strings."""
@@ -68,64 +83,101 @@ def main():
     parser = argparse.ArgumentParser(
         description="Decrypt a file encrypted with CryptoJS/OpenSSL AES salted format."
     )
+    
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "-d", "--decrypt",
+        action="store_true",
+        help="Decrypt a Base64 AES-encrypted file (default output: decrypted-<file>)."
+    )
+    mode.add_argument(
+        "-e", "--encrypt",
+        action="store_true",
+        help="Encrypt a JSON file to a Base64 AES-encrypted file (default output: encrypted-<file>)."
+    )
+    
     parser.add_argument(
-        "encrypted_file",
+        "filename",
         type=str,
-        help="Path to the file containing Base64-encrypted AES data." #  (starts with 'U2FsdGVkX1...')
+        help="The file containing data to en- or decrypt." #  (Base64-encrypted AES starts with 'U2FsdGVkX1...')
     )
     parser.add_argument(
         "password",
         type=str,
-        help="Password used to encrypt the file."
+        help="Password used to en- or decrypt the file."
     )
     parser.add_argument(
         "-o", "--output",
         type=str,
         default=None,
-        help="Output filename for decrypted content. Defaults to 'decrypted-<encrypted_file>'."
+        help="Specify an optional output filename for the result."
     )
     parser.add_argument(
-        "-e", "--export-pgp",
+        "-k", "--export-pgp-keys",
         action="store_true",
         help="If set, attempt to parse decrypted JSON and export PGP keys as .asc files."
     )
 
     args = parser.parse_args()
 
-    encrypted_file = args.encrypted_file
+    file = Path(args.filename).name # args.filename
     password = args.password
-    output_file = args.output or f"decrypted-{encrypted_file}"
 
-    try:
-        with open(encrypted_file, "r", encoding="utf-8") as f:
-            encrypted_text = f.read().strip()
-    except Exception as e:
-        print(f"Error reading file '{encrypted_file}': {e}")
-        sys.exit(1)
+    if args.encrypt:
+        output_file = args.output or f"encrypted-{file}"
 
-    try:
-        decrypted_bytes = decrypt_openssl_aes(encrypted_text, password)
-        decrypted_text = decrypted_bytes.decode("utf-8", errors="replace")
-    except Exception as e:
-        print(f"Decryption failed: {e}")
-        sys.exit(1)
-
-    try:
-        with open(output_file, "w", encoding="utf-8") as f:
-            f.write(decrypted_text)
-        print(f"✅ Decrypted content written to {output_file}")
-    except Exception as e:
-        print(f"Error writing file '{output_file}': {e}")
-        sys.exit(1)
-
-    if args.export_pgp:
         try:
-            content = json.loads(decrypted_text)
-            export_pgp_keys(content, output_file)
-        except json.JSONDecodeError:
-            print("⚠️  Decrypted content is not valid JSON; cannot extract PGP keys.")
+            with open(file, "r", encoding="utf-8") as f:
+                json_data = f.read().strip()
+            # Validate JSON
+            parsed = json.loads(json_data)
+            formatted = json.dumps(parsed, separators=(',', ':'), sort_keys=True)
         except Exception as e:
-            print(f"⚠️  Error exporting PGP keys: {e}")
+            print(f"❌ Error reading or parsing JSON file '{args.file}': {e}")
+            sys.exit(1)
+
+        try:
+            encrypted_b64 = encrypt_openssl_aes(formatted, args.password)
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(encrypted_b64)
+            print(f"🔒 Encrypted file written to {output_file}")
+        except Exception as e:
+            print(f"❌ Encryption failed: {e}")
+            sys.exit(1)
+
+    else : # args.decrypt:
+        output_file = args.output or f"decrypted-{file}"
+
+        try:
+            with open(file, "r", encoding="utf-8") as f:
+                encrypted_text = f.read().strip()
+        except Exception as e:
+            print(f"Error reading file '{file}': {e}")
+            sys.exit(1)
+
+        try:
+            decrypted_bytes = decrypt_openssl_aes(encrypted_text, password)
+            decrypted_text = decrypted_bytes.decode("utf-8", errors="replace")
+        except Exception as e:
+            print(f"Decryption failed: {e}")
+            sys.exit(1)
+
+        try:
+            with open(output_file, "w", encoding="utf-8") as f:
+                f.write(decrypted_text)
+            print(f"✅ Decrypted content written to {output_file}")
+        except Exception as e:
+            print(f"Error writing file '{output_file}': {e}")
+            sys.exit(1)
+
+        if args.export_pgp:
+            try:
+                content = json.loads(decrypted_text)
+                export_pgp_keys(content, output_file)
+            except json.JSONDecodeError:
+                print("⚠️  Decrypted content is not valid JSON; cannot extract PGP keys.")
+            except Exception as e:
+                print(f"⚠️  Error exporting PGP keys: {e}")
 
 if __name__ == "__main__":
     main()
