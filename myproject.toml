@@ -1,14 +1,22 @@
 [project]
-name = "cryptojs-decryptor"
-version = "0.1.0"
-description = "Decrypt AES files encrypted with CryptoJS/OpenSSL salted format"
+name = "peach-backup-decryptor"
+version = "0.1.1"
+description = "Decrypt AES files encrypted with CryptoJS/OpenSSL salted format for use with Peach Bitcoin backup files."
+license = { text = "MIT" }
+readme = "README.md"
 authors = [
     { name = "Wolf" }
 ]
 requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 
-[project.dependencies]
-pycryptodome = ">=3.18"
+dependencies = [
+    "pycryptodome>=3.18"
+]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
