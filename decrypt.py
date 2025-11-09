@@ -37,9 +37,11 @@ def decrypt_openssl_aes(encrypted_b64: str, password: str) -> bytes:
         raise ValueError("Invalid padding in decrypted data.")
     return decrypted[:-pad_len]
 
-def encrypt_openssl_aes(plaintext: str, password: str) -> str:
+def encrypt_openssl_aes(plaintext: str, password: str, salt: bytes = None) -> str:
     """Encrypt plaintext using OpenSSL-compatible AES with random salt."""
-    salt = get_random_bytes(8)
+    if salt is None:
+        salt = get_random_bytes(8)
+
     key, iv = evp_bytes_to_key(password.encode("utf-8"), salt)
     cipher = AES.new(key, AES.MODE_CBC, iv)
 
@@ -50,6 +52,23 @@ def encrypt_openssl_aes(plaintext: str, password: str) -> str:
     encrypted = cipher.encrypt(padded)
     out = b"Salted__" + salt + encrypted
     return base64.b64encode(out).decode("utf-8")
+
+def extract_salt_from_file(filename):
+    with open(filename, 'rb') as f:
+        data = f.read()
+
+    try:
+        data = base64.b64decode(data)
+    except Exception:
+        pass
+
+    if data.startswith(b"Salted__"):
+        salt = data[8:16]
+        print(f"✅ Found salt: {salt.hex()}")
+        return salt
+    else:
+        print("⚠️ No 'Salted__' header found — file may not be in OpenSSL/CryptoJS format.")
+        return None
 
 def unescape_pgp(pgp_str: str) -> str:
     """Unescape any escaped newlines or quotes that may exist in JSON strings."""
@@ -85,46 +104,34 @@ def main():
     )
     
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument(
-        "-d", "--decrypt",
-        action="store_true",
-        help="Decrypt a Base64 AES-encrypted file (default output: decrypted-<file>)."
-    )
-    mode.add_argument(
-        "-e", "--encrypt",
-        action="store_true",
-        help="Encrypt a JSON file to a Base64 AES-encrypted file (default output: encrypted-<file>)."
-    )
+    mode.add_argument("-d", "--decrypt", action="store_true", help="Decrypt a Base64 AES-encrypted file (default output: decrypted-<file>).")
+    mode.add_argument("-e", "--encrypt", action="store_true", help="Encrypt a JSON file to a Base64 AES-encrypted file (default output: encrypted-<file>).")
     
-    parser.add_argument(
-        "filename",
-        type=str,
-        help="The file containing data to en- or decrypt." #  (Base64-encrypted AES starts with 'U2FsdGVkX1...')
-    )
-    parser.add_argument(
-        "password",
-        type=str,
-        help="Password used to en- or decrypt the file."
-    )
-    parser.add_argument(
-        "-o", "--output",
-        type=str,
-        default=None,
-        help="Specify an optional output filename for the result."
-    )
-    parser.add_argument(
-        "-k", "--export-pgp-keys",
-        action="store_true",
-        help="If set, attempt to parse decrypted JSON and export PGP keys as .asc files."
-    )
+    parser.add_argument("filename", type=str, help="The file containing data to en- or decrypt.") #  (Base64-encrypted AES starts with 'U2FsdGVkX1...')
+    parser.add_argument("password", type=str, help="Password used to en- or decrypt the file.")
+    parser.add_argument("-o", "--output", type=str, default=None, help="Specify an optional output filename for the result.")
+    parser.add_argument("-k", "--export-pgp-keys", action="store_true", help="If set, attempt to parse decrypted JSON and export PGP keys as .asc files.")
+    parser.add_argument("-x", "--extract-salt", action="store_true", help="Extract and display the salt from the encrypted file.")
+    parser.add_argument("-s", "--salt", type=str, help="Determine the salt to use for encryption, default is random.")
 
     args = parser.parse_args()
 
+    if args.extract_salt and not args.decrypt:
+        parser.error("--extract-salt can only be used with --decrypt")
+
+    if args.salt and not args.encrypt:
+        parser.error("--salt can only be used with --encrypt")
+
     file = Path(args.filename).name # args.filename
     password = args.password
-
+    
     if args.encrypt:
         output_file = args.output or f"encrypted-{file}"
+
+        if args.salt:
+            salt = bytes.fromhex(args.salt)
+        else:
+            salt = get_random_bytes(8)
 
         try:
             with open(file, "r", encoding="utf-8") as f:
@@ -137,7 +144,7 @@ def main():
             sys.exit(1)
 
         try:
-            encrypted_b64 = encrypt_openssl_aes(formatted, args.password)
+            encrypted_b64 = encrypt_openssl_aes(formatted, args.password, salt)
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(encrypted_b64)
             print(f"🔒 Encrypted file written to {output_file}")
@@ -147,6 +154,9 @@ def main():
 
     else : # args.decrypt:
         output_file = args.output or f"decrypted-{file}"
+
+        if args.extract_salt:
+            extract_salt_from_file(file)
 
         try:
             with open(file, "r", encoding="utf-8") as f:
@@ -170,7 +180,7 @@ def main():
             print(f"Error writing file '{output_file}': {e}")
             sys.exit(1)
 
-        if args.export_pgp:
+        if args.export_pgp_keys:
             try:
                 content = json.loads(decrypted_text)
                 export_pgp_keys(content, output_file)
