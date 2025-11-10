@@ -19,6 +19,6 @@ pkgs.mkShell {
     echo "Unlocker: 🔐 AES decryptor environment for peach bitcoin file backups ready."
     echo "             Including a graphical (GUI) wrapper for the script (CLI)."
     echo "Usage (GUI): python unlocker.py"
-    echo "Usage (CLI): python unlocker-cli.py --help"
+    echo "Usage (CLI): python unlocker_cli.py --help"
   '';
 }
