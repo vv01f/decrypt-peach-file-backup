@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
+# AES (OpenSSL-compatible) Encrypt/Decrypt Tool for use with Peach Bitcoin file backups
 import sys
 import base64
 import hashlib
 import argparse
 import json
+import logging
+import getpass
 from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 def evp_bytes_to_key(password: bytes, salt: bytes, key_len: int = 32, iv_len: int = 16):
-    """Pure Python implementation of OpenSSL EVP_BytesToKey using MD5."""
+    """Pure Python implementation of OpenSSL EVP_BytesToKey using MD5 (MD5, insecure for new systems)."""
     d = b""
     while len(d) < key_len + iv_len:
         d_i = hashlib.md5(d[-16:] + password + salt).digest() if d else hashlib.md5(password + salt).digest()
@@ -33,8 +38,8 @@ def decrypt_openssl_aes(encrypted_b64: str, password: str) -> bytes:
 
     # Remove PKCS#7 padding
     pad_len = decrypted[-1]
-    if pad_len < 1 or pad_len > 16:
-        raise ValueError("Invalid padding in decrypted data.")
+    if pad_len < 1 or pad_len > 16 or decrypted[-pad_len:] != bytes([pad_len]) * pad_len:
+        raise ValueError("Invalid PKCS#7 padding in decrypted data.")
     return decrypted[:-pad_len]
 
 def encrypt_openssl_aes(plaintext: str, password: str, salt: bytes = None) -> str:
@@ -47,14 +52,15 @@ def encrypt_openssl_aes(plaintext: str, password: str, salt: bytes = None) -> st
 
     # PKCS#7 padding
     pad_len = 16 - (len(plaintext.encode("utf-8")) % 16)
+    log.debug(f"Padding length: {pad_len}")
     padded = plaintext.encode("utf-8") + bytes([pad_len]) * pad_len
 
     encrypted = cipher.encrypt(padded)
     out = b"Salted__" + salt + encrypted
     return base64.b64encode(out).decode("utf-8")
 
-def extract_salt_from_file(filename):
-    with open(filename, 'rb') as f:
+def extract_salt_from_file(file: Path):
+    with file.open("rb") as f:
         data = f.read()
 
     try:
@@ -64,10 +70,10 @@ def extract_salt_from_file(filename):
 
     if data.startswith(b"Salted__"):
         salt = data[8:16]
-        print(f"✅ Found salt: {salt.hex()}")
+        log.info(f"🧂 Salt used: {salt.hex()}")
         return salt
     else:
-        print("⚠️ No 'Salted__' header found — file may not be in OpenSSL/CryptoJS format.")
+        log.error("⚠️ No 'Salted__' header found — file may not be in OpenSSL/CryptoJS format.")
         return None
 
 def unescape_pgp(pgp_str: str) -> str:
@@ -100,21 +106,36 @@ def export_pgp_keys(content: dict, base_filename: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Decrypt a file encrypted with CryptoJS/OpenSSL AES salted format."
+        description="Decrypt or encrypt a file compatible with OpenSSL AES (Salted__ header, Base64).",
+        epilog="""Examples:
+  Decrypt a backup:
+    decrypt.py -d peach-account.json
+
+  Extract the salt:
+    decrypt.py -x -d peach-account.json
+
+  Encrypt JSON with custom salt:
+    decrypt.py -e decrypted-peach-account.json -s 76067517a6f30d01
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
+
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("-d", "--decrypt", action="store_true", help="Decrypt a Base64 AES-encrypted file (default output: decrypted-<file>).")
     mode.add_argument("-e", "--encrypt", action="store_true", help="Encrypt a JSON file to a Base64 AES-encrypted file (default output: encrypted-<file>).")
-    
+
     parser.add_argument("filename", type=str, help="The file containing data to en- or decrypt.") #  (Base64-encrypted AES starts with 'U2FsdGVkX1...')
-    parser.add_argument("password", type=str, help="Password used to en- or decrypt the file.")
+    parser.add_argument("-p", "--password", type=str, help="Password used to en- or decrypt the file.")
     parser.add_argument("-o", "--output", type=str, default=None, help="Specify an optional output filename for the result.")
     parser.add_argument("-k", "--export-pgp-keys", action="store_true", help="If set, attempt to parse decrypted JSON and export PGP keys as .asc files.")
     parser.add_argument("-x", "--extract-salt", action="store_true", help="Extract and display the salt from the encrypted file.")
     parser.add_argument("-s", "--salt", type=str, help="Determine the salt to use for encryption, default is random.")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output (debug-level logging)")
 
     args = parser.parse_args()
+
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
 
     if args.extract_salt and not args.decrypt:
         parser.error("--extract-salt can only be used with --decrypt")
@@ -122,62 +143,66 @@ def main():
     if args.salt and not args.encrypt:
         parser.error("--salt can only be used with --encrypt")
 
-    file = Path(args.filename).name # args.filename
-    password = args.password
-    
+    file = Path(args.filename) # args.filename
+    password = args.password or getpass.getpass("Enter password: ")
+
     if args.encrypt:
-        output_file = args.output or f"encrypted-{file}"
+        output_file = args.output or f"encrypted-{file.name}"
 
         if args.salt:
             salt = bytes.fromhex(args.salt)
+            if len(salt) != 8:
+                parser.error("Salt must be exactly 8 bytes (16 hex characters) for OpenSSL compatibility.")
         else:
             salt = get_random_bytes(8)
+        
+        log.debug(f"Using salt: {salt.hex()}")
 
         try:
-            with open(file, "r", encoding="utf-8") as f:
+            with file.open("r", encoding="utf-8") as f:
                 json_data = f.read().strip()
             # Validate JSON
             parsed = json.loads(json_data)
             formatted = json.dumps(parsed, separators=(',', ':'), sort_keys=True)
         except Exception as e:
-            print(f"❌ Error reading or parsing JSON file '{args.file}': {e}")
+            log.error(f"❌ Error reading or parsing JSON file '{file}': {e}")
             sys.exit(1)
 
         try:
-            encrypted_b64 = encrypt_openssl_aes(formatted, args.password, salt)
+            encrypted_b64 = encrypt_openssl_aes(formatted, password, salt)
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(encrypted_b64)
-            print(f"🔒 Encrypted file written to {output_file}")
+            log.info(f"🔒 Encrypted file written to {output_file}")
         except Exception as e:
-            print(f"❌ Encryption failed: {e}")
+            log.error(f"❌ Encryption failed: {e}")
             sys.exit(1)
 
     else : # args.decrypt:
-        output_file = args.output or f"decrypted-{file}"
+        output_file = args.output or f"decrypted-{file.name}"
 
         if args.extract_salt:
             extract_salt_from_file(file)
 
         try:
-            with open(file, "r", encoding="utf-8") as f:
+            with file.open("r", encoding="utf-8") as f:
                 encrypted_text = f.read().strip()
         except Exception as e:
-            print(f"Error reading file '{file}': {e}")
+            log.error(f"❌ Error reading file '{file.name}': {e}")
             sys.exit(1)
 
         try:
             decrypted_bytes = decrypt_openssl_aes(encrypted_text, password)
             decrypted_text = decrypted_bytes.decode("utf-8", errors="replace")
         except Exception as e:
-            print(f"Decryption failed: {e}")
+            log.error(f"❌ Decryption failed: {e}")
             sys.exit(1)
 
         try:
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(decrypted_text)
-            print(f"✅ Decrypted content written to {output_file}")
+            log.info(f"✅ Decrypted content written to {output_file}")
         except Exception as e:
-            print(f"Error writing file '{output_file}': {e}")
+            log.error(f"❌ Error writing file '{output_file}': {e}")
             sys.exit(1)
 
         if args.export_pgp_keys:
@@ -185,9 +210,10 @@ def main():
                 content = json.loads(decrypted_text)
                 export_pgp_keys(content, output_file)
             except json.JSONDecodeError:
-                print("⚠️  Decrypted content is not valid JSON; cannot extract PGP keys.")
+                log.error("❌ Decrypted content is not valid JSON; cannot extract PGP keys.")
             except Exception as e:
-                print(f"⚠️  Error exporting PGP keys: {e}")
+                log.error(f"❌️ Error exporting PGP keys: {e}")
 
 if __name__ == "__main__":
     main()
+    sys.exit(0)
