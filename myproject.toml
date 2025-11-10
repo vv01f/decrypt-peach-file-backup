@@ -1,7 +1,7 @@
 [project]
-name = "peach-backup-decryptor"
-version = "0.1.1"
-description = "Decrypt AES files encrypted with CryptoJS/OpenSSL salted format for use with Peach Bitcoin backup files."
+name = "Unlocker"
+version = "0.1.2"
+description = "Decrypt and encrypt AES files encrypted with CryptoJS/OpenSSL salted format for use with Peach Bitcoin backup files."
 license = { text = "MIT" }
 readme = "README.md"
 authors = [
@@ -15,9 +15,26 @@ classifiers = [
 ]
 
 dependencies = [
-    "pycryptodome>=3.18"
+    "pycryptodome>=3.18",               # AES encryption / decryption
+    "PySide6>=6.7",                     # GUI
+    "tomli>=2.0; python_version<'3.11'",# TOML parsing for Python <3.11
+    "bech32>=1.2",                      # Bitcoin / Lightning-related helpers
+    "mnemonic>=0.21",
+    "cryptography>=41.0",
+    "requests>=2.32",                   # HTTP / API
+    #~ "rich>=13.0",                       # Optional: nicer CLI output
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pycryptodome = "^3.18"      # AES, random bytes
+pyside6 = "^6.7"             # GUI
+tomli = "^2.0"               # toml parsing for Python < 3.11
+requests = "^2.32"           # HTTP / API
+bech32 = "^1.2"              # address encoding
+mnemonic = "^0.21"           # BIP39 seed handling
+cryptography = "^41.0"       # ECDSA, general crypto

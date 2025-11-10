@@ -4,10 +4,13 @@ You may need to retrieve information from the file backup to use your existing a
 * exporting the PGP keys and
 * encryption of changes to settings
 * control the salt used for encryption
+* a GUI alongside the CLI script
 
-For the main use case, from the command line, run: `./decrypt.py -d <filename> <password>`
+For running the Graphical User Interface, start: `./unlocker.py`
 
-For more information on options, run: `./decrypt.py --help`
+For the main use case on the command line, run: `./unlocker-cli.py -d <filename> -p <password>`
+
+For more information on options, run: `./unlocker-cli.py --help`
 
 ## Dependencies
 

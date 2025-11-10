@@ -10,6 +10,16 @@ import getpass
 from pathlib import Path
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from importlib.metadata import metadata, PackageNotFoundError
+
+if sys.version_info >= (3, 11):
+    import tomllib as tomli  # built-in in Python starting 3.11
+else:
+    try:
+        import tomli  # external backport for older Python
+    except ImportError:
+        tomli = None
+
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -104,6 +114,32 @@ def export_pgp_keys(content: dict, base_filename: str):
             f.write(public_key)
         print(f"🗝️  Exported PGP public key → {pub_path}")
 
+def get_version_info():
+    fallback = {
+        "name": "Unlocker",
+        "version": "?0.1.2?",
+        "license": "MIT",
+    }
+    pyproject = Path(__file__).parent / "myproject.toml"
+    if not pyproject.exists() or not tomli:
+        log.info("Using fallback version info")
+        return fallback
+    elif pyproject.exists() and tomli:
+        try:
+            with pyproject.open("rb") as f:
+                data = tomli.load(f)
+            metadata = data.get("project", {})
+            license = metadata.get("license", fallback["license"])
+            license = license.get("text") if isinstance(license, dict) and license.get("text") else license if isinstance(license, str) else fallback["license"]
+
+            return {
+                "name": metadata.get("name", fallback["name"]),
+                "version": metadata.get("version", fallback["version"]),
+                "license": license
+            }
+        except Exception:
+            return fallback
+
 def main():
     parser = argparse.ArgumentParser(
         description="Decrypt or encrypt a file compatible with OpenSSL AES (Salted__ header, Base64).",
@@ -120,6 +156,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
 
+    version_info = get_version_info()
+
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("-d", "--decrypt", action="store_true", help="Decrypt a Base64 AES-encrypted file (default output: decrypted-<file>).")
     mode.add_argument("-e", "--encrypt", action="store_true", help="Encrypt a JSON file to a Base64 AES-encrypted file (default output: encrypted-<file>).")
@@ -131,8 +169,10 @@ def main():
     parser.add_argument("-x", "--extract-salt", action="store_true", help="Extract and display the salt from the encrypted file.")
     parser.add_argument("-s", "--salt", type=str, help="Determine the salt to use for encryption, default is random.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output (debug-level logging)")
+    parser.add_argument('--version', action='version', version=f"{version_info['name']} v{version_info['version']} - License: {version_info['license']}")
 
     args = parser.parse_args()
+
 
     if args.verbose:
         log.setLevel(logging.DEBUG)
@@ -155,7 +195,7 @@ def main():
                 parser.error("Salt must be exactly 8 bytes (16 hex characters) for OpenSSL compatibility.")
         else:
             salt = get_random_bytes(8)
-        
+
         log.debug(f"Using salt: {salt.hex()}")
 
         try:
