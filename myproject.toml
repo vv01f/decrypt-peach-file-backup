@@ -2,7 +2,7 @@
 name = "Unlocker"
 version = "0.1.2"
 description = "Decrypt and encrypt AES files encrypted with CryptoJS/OpenSSL salted format for use with Peach Bitcoin backup files."
-license = { text = "MIT" }
+license = { text = "MIT", file = "LICENSE.md" }
 readme = "README.md"
 authors = [
     { name = "Wolf" }
@@ -29,12 +29,6 @@ dependencies = [
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pycryptodome = "^3.18"      # AES, random bytes
-pyside6 = "^6.7"             # GUI
-tomli = "^2.0"               # toml parsing for Python < 3.11
-requests = "^2.32"           # HTTP / API
-bech32 = "^1.2"              # address encoding
-mnemonic = "^0.21"           # BIP39 seed handling
-cryptography = "^41.0"       # ECDSA, general crypto
+[project.urls]
+repository = "https://github.com/vv01f/decrypt-peach-file-backup"
+documentation = "https://docs.peachbitcoin.com/"

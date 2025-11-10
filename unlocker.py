@@ -1,27 +1,39 @@
 #!/usr/bin/env python3
 """
-Peach GUI (PySide6) wrapper around decrypt.py functions.
+Unlocker
+Peach GUI (PySide6) wrapper around unlocker_cli.py functions.
 
-Requires: PySide6, and that decrypt.py is importable in same folder
+Requires: PySide6, and that unlocker-cli.py is importable in same folder
 """
 
 import sys
 import json
 import traceback
 from pathlib import Path
-
 from PySide6.QtWidgets import (
-    QApplication, QButtonGroup, QCheckBox, QHBoxLayout, QLabel,
-    QLineEdit, QPushButton, QTextEdit, QFileDialog, QMainWindow,
-    QMessageBox, QRadioButton, QSizePolicy, QStatusBar, QVBoxLayout,
-    QWidget
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QRadioButton,
+    QSizePolicy,
+    QStatusBar,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 from PySide6.QtCore import Qt
 
-# Import functions from your decrypt.py cli tool (must be in same directory)
-# decrypt.py must expose: encrypt_openssl_aes, decrypt_openssl_aes, extract_salt_from_file, export_pgp_keys
+# Import functions from your unlocker_cli.py cli tool (must be in same directory)
+# unlocker_cli.py must expose: encrypt_openssl_aes, decrypt_openssl_aes, extract_salt_from_file, export_pgp_keys
 try:
-    from decrypt import (
+    from unlocker_cli import (
         encrypt_openssl_aes,
         decrypt_openssl_aes,
         extract_salt_from_file,
@@ -29,8 +41,8 @@ try:
         get_version_info,
     )
 except Exception as e:
-    print("Failed to import functions from decrypt.py:", e)
-    print("Make sure peach_gui.py and decrypt.py are in the same folder and decrypt.py exposes the functions.")
+    print("Failed to import functions from unlocker_cli.py:", e)
+    print("Make sure unlocker.py and unlocker_cli.py are in the same folder and unlocker_cli.py exposes the functions.")
     raise
 
 def show_error(parent, title, msg):
@@ -40,17 +52,8 @@ class PeachGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Unlocker: Peach Backup — Encrypt / Decrypt")
-        self.resize(800, 600)
-        try:
-            # read from myproject.toml if using importlib.metadata
-            self.version_info = get_version_info() #metadata.metadata("myproject")
-        except Exception:
-            self.version_info = {
-                "name": "Unlocker",
-                "version": "?0.1.2?",
-                "license": "MIT",
-                "author": "Wolf"
-            }
+        self.resize(400, 600)
+        self.version_info = get_version_info()
         self._build_ui()
         self._build_status_bar()
 
@@ -142,7 +145,7 @@ class PeachGUI(QMainWindow):
 
     def _build_status_bar(self):
         # Create a label for the right-aligned message
-        right_label = QLabel(f"{self.version_info['name']} v{self.version_info['version']} – {self.version_info['license']}")
+        right_label = QLabel(f"{self.version_info['Name']} v{self.version_info['Version']} – {self.version_info['License']}")
         right_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         # Make it expand to take available space (pushes it to the right)

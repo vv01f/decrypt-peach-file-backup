@@ -114,11 +114,18 @@ def export_pgp_keys(content: dict, base_filename: str):
             f.write(public_key)
         print(f"🗝️  Exported PGP public key → {pub_path}")
 
+def fixcase_keys(d):
+    """Recursively capitalize dictionary keys (first letter uppercase, rest lowercase)."""
+    if not isinstance(d, dict):
+        return d
+    return {k.capitalize(): fixcase_keys(v) for k, v in d.items()}
+
 def get_version_info():
     fallback = {
-        "name": "Unlocker",
-        "version": "?0.1.2?",
-        "license": "MIT",
+        "Name": "Unlocker",
+        "Version": "?0.1.2?",
+        "License": "MIT",
+        "Description": "Decrypt and encrypt AES files encrypted with CryptoJS/OpenSSL salted format for use with Peach Bitcoin backup files.",
     }
     pyproject = Path(__file__).parent / "myproject.toml"
     if not pyproject.exists() or not tomli:
@@ -127,15 +134,16 @@ def get_version_info():
     elif pyproject.exists() and tomli:
         try:
             with pyproject.open("rb") as f:
-                data = tomli.load(f)
-            metadata = data.get("project", {})
-            license = metadata.get("license", fallback["license"])
-            license = license.get("text") if isinstance(license, dict) and license.get("text") else license if isinstance(license, str) else fallback["license"]
+                data = fixcase_keys(tomli.load(f))
+            metadata = data.get("Project", {})
+            license = metadata.get("License", fallback["License"])
+            license = license.get("Text") if isinstance(license, dict) and license.get("Text") else license if isinstance(license, str) else fallback["License"]
 
             return {
-                "name": metadata.get("name", fallback["name"]),
-                "version": metadata.get("version", fallback["version"]),
-                "license": license
+                "Name": metadata.get("Name", fallback["Name"]),
+                "Version": metadata.get("Version", fallback["Version"]),
+                "License": license,
+                "Description": fallback["Description"]
             }
         except Exception:
             return fallback
@@ -169,7 +177,7 @@ def main():
     parser.add_argument("-x", "--extract-salt", action="store_true", help="Extract and display the salt from the encrypted file.")
     parser.add_argument("-s", "--salt", type=str, help="Determine the salt to use for encryption, default is random.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output (debug-level logging)")
-    parser.add_argument('--version', action='version', version=f"{version_info['name']} v{version_info['version']} - License: {version_info['license']}")
+    parser.add_argument('--version', action='version', version=f"{version_info['Name']} v{version_info['Version']} - License: {version_info['License']}\n\n{version_info['Description']}")
 
     args = parser.parse_args()
 
